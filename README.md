@@ -1,2 +1,2 @@
-# Mira.ai
+# Mira
 AI Caller Agent
