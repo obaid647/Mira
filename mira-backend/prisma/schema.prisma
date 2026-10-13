@@ -1,0 +1,189 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AppointmentStatus {
+  CONFIRMED
+}
+
+enum BookingState {
+  PREPARED
+  INSERTING
+  CONFIRMED
+  FAILED
+}
+
+enum LeadStatus {
+  OPEN
+}
+
+enum Urgency {
+  UNKNOWN
+  ROUTINE
+  URGENT
+}
+
+model Business {
+  id                   String   @id
+  name                 String
+  phoneNumber          String
+  address              String
+  timezone             String
+  operatingHours       Json
+  serviceArea          String[]
+  policies             Json
+  calendarId           String?
+  retellAgentId        String?  @unique
+  isSampleData         Boolean  @default(false)
+  minimumNoticeMinutes Int      @default(120)
+  bufferBeforeMinutes  Int      @default(0)
+  bufferAfterMinutes   Int      @default(15)
+  bookingHorizonDays   Int      @default(30)
+  slotIntervalMinutes  Int      @default(15)
+  createdAt            DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime @updatedAt @db.Timestamptz(3)
+  services             Service[]
+  customers            Customer[]
+  appointments         Appointment[]
+  calls                CallLog[]
+  leads                Lead[]
+  bookingAttempts      BookingAttempt[]
+}
+
+model Service {
+  id                String  @id
+  businessId        String
+  name              String
+  description       String
+  aliases           String[]
+  durationMinutes   Int
+  price             Decimal? @db.Decimal(10, 2)
+  active            Boolean @default(true)
+  emergencyEligible Boolean @default(false)
+  business          Business @relation(fields: [businessId], references: [id])
+  appointments      Appointment[]
+  bookingAttempts   BookingAttempt[]
+  @@unique([id, businessId])
+  @@index([businessId, active])
+}
+
+model Customer {
+  id          String   @id @default(uuid())
+  businessId  String
+  name        String
+  phoneNumber String
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+  business    Business @relation(fields: [businessId], references: [id])
+  appointments Appointment[]
+  calls       CallLog[]
+  leads       Lead[]
+  bookingAttempts BookingAttempt[]
+  @@unique([businessId, phoneNumber])
+  @@unique([id, businessId])
+}
+
+model Appointment {
+  id                    String   @id @default(uuid())
+  businessId            String
+  customerId            String
+  serviceId             String
+  startTime             DateTime @db.Timestamptz(3)
+  endTime               DateTime @db.Timestamptz(3)
+  serviceAddress        String
+  problemDescription    String
+  status                AppointmentStatus @default(CONFIRMED)
+  googleCalendarEventId String   @unique
+  bookingRequestId      String   @unique
+  retellCallId          String?
+  createdAt             DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime @updatedAt @db.Timestamptz(3)
+  business              Business @relation(fields: [businessId], references: [id])
+  customer              Customer @relation(fields: [customerId, businessId], references: [id, businessId])
+  service               Service  @relation(fields: [serviceId, businessId], references: [id, businessId])
+  attempt               BookingAttempt @relation(fields: [bookingRequestId, businessId], references: [bookingRequestId, businessId])
+  calls                 CallLog[]
+  @@unique([id, businessId])
+  @@unique([bookingRequestId, businessId])
+  @@index([businessId, startTime, endTime])
+  @@index([retellCallId])
+}
+
+model BookingAttempt {
+  bookingRequestId String @id
+  businessId      String
+  customerId      String
+  serviceId       String
+  calendarId      String
+  eventId         String @unique
+  fingerprint     String
+  snapshot        Json
+  startTime       DateTime @db.Timestamptz(3)
+  endTime         DateTime @db.Timestamptz(3)
+  reservedStart   DateTime @db.Timestamptz(3)
+  reservedEnd     DateTime @db.Timestamptz(3)
+  retellCallId    String?
+  state           BookingState @default(PREPARED)
+  failureCode     String?
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
+  business        Business @relation(fields: [businessId], references: [id])
+  customer        Customer @relation(fields: [customerId, businessId], references: [id, businessId])
+  service         Service @relation(fields: [serviceId, businessId], references: [id, businessId])
+  appointment     Appointment?
+  @@unique([bookingRequestId, businessId])
+  @@index([calendarId, state, reservedStart, reservedEnd])
+}
+
+model CallLog {
+  id            String @id @default(uuid())
+  businessId    String
+  retellCallId  String @unique
+  customerId    String?
+  appointmentId String?
+  callerNumber  String?
+  callStatus    String
+  callSummary   String?
+  failureDetails Json?
+  transcript    String?
+  recordingUrl  String?
+  lifecycleRank Int @default(0)
+  startedAt     DateTime? @db.Timestamptz(3)
+  endedAt       DateTime? @db.Timestamptz(3)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  business      Business @relation(fields: [businessId], references: [id])
+  customer      Customer? @relation(fields: [customerId, businessId], references: [id, businessId])
+  appointment   Appointment? @relation(fields: [appointmentId, businessId], references: [id, businessId])
+  @@unique([id, businessId])
+}
+
+model Lead {
+  id               String @id @default(uuid())
+  businessId       String
+  customerId       String?
+  callerNumber     String?
+  serviceRequested String
+  notes            String
+  urgency          Urgency @default(UNKNOWN)
+  status           LeadStatus @default(OPEN)
+  leadRequestId    String @unique
+  fingerprint      String
+  retellCallId     String?
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+  business         Business @relation(fields: [businessId], references: [id])
+  customer         Customer? @relation(fields: [customerId, businessId], references: [id, businessId])
+  @@index([businessId, createdAt])
+}
+
+model WebhookReceipt {
+  id           String @id @default(uuid())
+  event        String
+  retellCallId String
+  receivedAt   DateTime @default(now()) @db.Timestamptz(3)
+  @@unique([event, retellCallId])
+}
