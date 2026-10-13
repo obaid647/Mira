@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "business_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "const": "demo-business"
+    },
+    "service_requested": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "The verified service requested collected during the conversation."
+    },
+    "notes": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000,
+      "description": "The verified notes collected during the conversation."
+    },
+    "lead_request_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "const": "{{lead_request_id}}"
+    },
+    "caller_number": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40,
+      "description": "The verified caller number collected during the conversation."
+    },
+    "customer_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "description": "The verified customer name collected during the conversation."
+    },
+    "urgency": {
+      "default": "unknown",
+      "type": "string",
+      "enum": [
+        "unknown",
+        "routine",
+        "urgent"
+      ],
+      "description": "The verified urgency collected during the conversation."
+    }
+  },
+  "required": [
+    "business_id",
+    "service_requested",
+    "notes",
+    "lead_request_id"
+  ],
+  "additionalProperties": false
+}

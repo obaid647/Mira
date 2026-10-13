@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "business_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "const": "demo-business"
+    },
+    "service_query": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 500,
+      "description": "The verified service query collected during the conversation."
+    }
+  },
+  "required": [
+    "business_id",
+    "service_query"
+  ],
+  "additionalProperties": false
+}
