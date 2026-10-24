@@ -15,6 +15,7 @@ import { PostgresBookingLock } from '../src/modules/appointments/booking-lock.js
 import { demoBusiness, demoServices } from '../prisma/demo-data.js';
 import { testEnv, booking, FakeCalendar, now } from './helpers.js';
 import { createLead } from '../src/modules/leads/lead.service.js';
+import { retellBookingPrefix } from '../src/utils/identity.js';
 
 describe('Real PostgreSQL migrations and concurrency', () => {
   let embedded: EmbeddedPostgres | undefined, admin: Pool | undefined;
@@ -62,6 +63,35 @@ describe('Real PostgreSQL migrations and concurrency', () => {
   it('connects and persists normalized business-specific records', async () => { const { a, store1 } = services(); await store1.ping(); const r = await a.create(booking()); expect(r.status).toBe('confirmed'); expect(await db1.prisma.customer.count()).toBe(1); expect(await db1.prisma.appointment.count()).toBe(1); expect((await db2.prisma.customer.findFirst())!.phoneNumber).toBe('+15195550123'); });
   it('serializes conflicting attempts across independent connections', async () => { const { a, b, calendar } = services(); const result = await Promise.allSettled([a.create(booking()), b.create(booking({ booking_request_id: 'other' }))]); expect(result.filter(r => r.status === 'fulfilled')).toHaveLength(1); expect(calendar.inserts).toBe(1); expect(await db1.prisma.appointment.count()).toBe(1); });
   it('deduplicates simultaneous retries across connections', async () => { const { a, b, calendar } = services(); const [first, second] = await Promise.all([a.create(booking()), b.create(booking())]); expect(first.appointment_id).toBe(second.appointment_id); expect(calendar.inserts).toBe(1); });
+  it('allocates one server-owned call attempt across independent connections despite different supplied IDs', async () => {
+    const { a, b, calendar } = services();
+    const context = { callId: 'call-concurrent', agentId: 'agent-demo' };
+    const [first, second] = await Promise.all([a.create(booking({ booking_request_id: 'model-one' }), context), b.create(booking({ booking_request_id: 'model-two' }), context)]);
+    expect(first.appointment_id).toBe(second.appointment_id);
+    expect(first.booking_request_id).toBe(retellBookingPrefix('demo-business', context.callId) + '1');
+    expect(await db1.prisma.bookingAttempt.count()).toBe(1);
+    expect(await db2.prisma.appointment.count()).toBe(1); expect(calendar.inserts).toBe(1);
+  });
+  it('persists the failed attempt counter and advances it on another connection only for changed details', async () => {
+    const { a, b, calendar } = services();
+    const context = { callId: 'call-counter', agentId: 'agent-demo' };
+    calendar.busyIntervals.push({ start: new Date('2026-10-12T09:00:00-04:00'), end: new Date('2026-10-12T10:00:00-04:00') });
+    await expect(a.create(booking(), context)).rejects.toMatchObject({ code: 'SLOT_UNAVAILABLE' });
+    await expect(b.create(booking({ booking_request_id: 'ignored' }), context)).rejects.toMatchObject({ code: 'SLOT_UNAVAILABLE' });
+    expect(await db2.prisma.bookingAttempt.count()).toBe(1);
+    const result = await b.create(booking({ appointment_start: '2026-10-12T11:00:00-04:00' }), context);
+    expect(result.booking_request_id).toBe(retellBookingPrefix('demo-business', context.callId) + '2');
+    expect(await db1.prisma.bookingAttempt.count()).toBe(2); expect(calendar.inserts).toBe(1);
+  });
+  it('recovers the same server-owned ID after a post-insert database failure through a new connection', async () => {
+    const { a, b, store1, calendar } = services();
+    const context = { callId: 'call-save-failure', agentId: 'agent-demo' };
+    vi.spyOn(store1, 'confirm').mockRejectedValueOnce(new Error('injected failure'));
+    await expect(a.create(booking(), context)).rejects.toMatchObject({ code: 'BOOKING_RECONCILIATION_REQUIRED' });
+    const result = await b.create(booking({ booking_request_id: 'invented-after-failure' }), context);
+    expect(result.booking_request_id).toBe(retellBookingPrefix('demo-business', context.callId) + '1');
+    expect(await db1.prisma.bookingAttempt.count()).toBe(1); expect(calendar.inserts).toBe(1);
+  });
   it('recovers a database-save failure after a real persisted journal and fake Calendar insertion', async () => { const { a, b, store1, calendar } = services(); vi.spyOn(store1, 'confirm').mockRejectedValueOnce(new Error('injected failure')); await expect(a.create(booking())).rejects.toMatchObject({ code: 'BOOKING_RECONCILIATION_REQUIRED' }); expect((await db1.prisma.bookingAttempt.findFirst())!.state).toBe('INSERTING'); await b.reconcile((await createStore(db2.prisma).unresolved())[0]!); expect(await db1.prisma.appointment.count()).toBe(1); expect(calendar.inserts).toBe(1); });
   it('deduplicates urgent leads concurrently', async () => { const { store1, store2 } = services(); const input = { business_id: 'demo-business', service_requested: 'pipe leak', notes: 'urgent callback', urgency: 'urgent' as const, lead_request_id: 'lead:one' }; const [first, second] = await Promise.all([createLead(store1, input), createLead(store2, input)]); expect(first.lead_id).toBe(second.lead_id); expect(await db1.prisma.lead.count()).toBe(1); });
   it('persists webhook receipts, out-of-order summaries and appointment association', async () => { const { store1, store2, a } = services(); await a.create(booking(), { callId: 'call-db', agentId: 'agent-demo' }); const analyzed = { event: 'call_analyzed' as const, businessId: 'demo-business', callId: 'call-db', status: 'ended', rank: 3, summary: 'Sample completed booking' }; await Promise.all([store1.recordWebhook(analyzed), store2.recordWebhook(analyzed)]); await store1.recordWebhook({ ...analyzed, event: 'call_started', rank: 1, status: 'ongoing', summary: undefined }); const call = await db1.prisma.callLog.findUniqueOrThrow({ where: { retellCallId: 'call-db' } }); expect(call.callStatus).toBe('ended'); expect(call.callSummary).toBe(analyzed.summary); expect(call.appointmentId).toBeTruthy(); expect(call.transcript).toBeNull(); expect(await db1.prisma.webhookReceipt.count()).toBe(2); });

@@ -1,9 +1,10 @@
 import { DateTime } from 'luxon';
-import type { Appointment, Attempt, BookingInput, BookingLock, Business, CallContext, Service, Store } from '../../types/domain.js';
+import type { Appointment, Attempt, BookingInput, BookingLock, Business, CallBookingInput, CallContext, Service, Store } from '../../types/domain.js';
 import type { Calendar, CalendarEvent } from '../../integrations/google-calendar/calendar.types.js';
 import { CalendarWriteError } from '../../integrations/google-calendar/calendar.errors.js';
 import { AppError, calendarUnavailable, slotUnavailable } from '../../utils/errors.js';
-import { eventId, fingerprint } from '../../utils/identity.js';
+import { eventId, fingerprint, retellBookingPrefix } from '../../utils/identity.js';
+import { bookingSchema, retellBookingSchema } from './appointment.schema.js';
 import { requireBusiness } from '../businesses/business.service.js';
 import { requireService } from '../services/service.service.js';
 import { occupied, overlaps, reserved, validateSlot } from './availability.service.js';
@@ -12,7 +13,7 @@ const recoveryError = () => new AppError('BOOKING_RECONCILIATION_REQUIRED', 'I c
 export class AppointmentService {
   constructor(private store: Store, private calendar: Calendar, private lock: BookingLock, private now: () => Date) {}
   private confirmation(a: Appointment, b: Business) {
-    return { success: true, appointment_id: a.id, status: 'confirmed', appointment_start: DateTime.fromJSDate(a.startTime, { zone: b.timezone }).toISO(),
+    return { success: true, appointment_id: a.id, booking_request_id: a.bookingRequestId, status: 'confirmed', appointment_start: DateTime.fromJSDate(a.startTime, { zone: b.timezone }).toISO(),
       message: 'Appointment successfully created.', is_sample_data: b.isSampleData };
   }
   private verifyEvent(event: CalendarEvent, a: Attempt) {
@@ -23,11 +24,47 @@ export class AppointmentService {
     if (a.businessId !== b.id || a.fingerprint !== fp || a.retellCallId !== (context?.callId ?? null)) throw new AppError('IDEMPOTENCY_CONFLICT', 'Please use a new identifier for a different booking attempt.', 409);
     if (a.state !== 'CONFIRMED' && a.calendarId !== b.calendarId) throw recoveryError();
   }
-  async create(input: BookingInput, context?: CallContext) {
-    const normalized = { ...input, appointment_start: new Date(input.appointment_start).toISOString() };
+  private async callInput(input: CallBookingInput, b: Business, context: CallContext): Promise<BookingInput> {
+    // Called only while holding the calendar lock. The existing journal is the durable counter.
+    const attempts = await this.store.callBookingAttempts(b.id, context.callId);
+    for (const a of attempts) {
+      // Reuse historical attempts too: a delayed retry must not become a new booking.
+      const candidate = { ...input, booking_request_id: a.bookingRequestId };
+      if (fingerprint(candidate) === a.fingerprint) return candidate;
+    }
+    if (attempts.some(a => a.state !== 'FAILED')) {
+      throw new AppError('IDEMPOTENCY_CONFLICT', 'A booking already exists or needs follow-up for this call. Please leave a message.', 409);
+    }
+    const prefix = retellBookingPrefix(b.id, context.callId);
+    let counter = 0;
+    for (const a of attempts) {
+      if (!a.bookingRequestId.startsWith(prefix)) continue; // Support journals created before server allocation.
+      const suffix = a.bookingRequestId.slice(prefix.length);
+      const value = Number(suffix);
+      if (!/^[1-9]\d*$/.test(suffix) || !Number.isSafeInteger(value)) throw recoveryError();
+      counter = Math.max(counter, value);
+    }
+    if (!Number.isSafeInteger(counter + 1)) throw recoveryError();
+    return { ...input, booking_request_id: prefix + (counter + 1) };
+  }
+  async create(input: BookingInput | CallBookingInput, context?: CallContext) {
+    if (context) {
+      const parsed = retellBookingSchema.parse(input);
+      const normalized = { ...parsed, appointment_start: new Date(parsed.appointment_start).toISOString() };
+      const b = await requireBusiness(this.store, normalized.business_id);
+      if (!b.calendarId) throw calendarUnavailable();
+      return this.lock.withLock(b.calendarId, async assertHeld => {
+        const assigned = await this.callInput(normalized, b, context);
+        assertHeld();
+        return this.createLocked(assigned, b, context, assertHeld);
+      });
+    }
+    // Flat requests are an API-key-authorized manual testing contract, not Retell call context.
+    const parsed = bookingSchema.parse(input);
+    const normalized = { ...parsed, appointment_start: new Date(parsed.appointment_start).toISOString() };
     const fp = fingerprint(normalized);
-    const b = await requireBusiness(this.store, input.business_id);
-    const existing = await this.store.attempt(input.booking_request_id);
+    const b = await requireBusiness(this.store, normalized.business_id);
+    const existing = await this.store.attempt(normalized.booking_request_id);
     if (existing) {
       this.verifyAttempt(existing, b, fp, context);
       if (existing.state === 'CONFIRMED') {
@@ -37,29 +74,31 @@ export class AppointmentService {
       }
     }
     if (!b.calendarId) throw calendarUnavailable();
-    return this.lock.withLock(b.calendarId, async assertHeld => {
-      let a = await this.store.attempt(input.booking_request_id);
-      if (a) {
-        this.verifyAttempt(a, b, fp, context);
-        if (a.state === 'CONFIRMED') {
-          const appointment = await this.store.appointment(a.bookingRequestId);
-          if (!appointment) throw recoveryError();
-          return this.confirmation(appointment, b);
-        }
-        if (a.state === 'FAILED') throw new AppError(a.failureCode ?? 'BOOKING_FAILED', 'That booking attempt failed. Please select a time and start a new attempt.', a.failureCode === 'SLOT_UNAVAILABLE' ? 409 : 503);
+    return this.lock.withLock(b.calendarId, assertHeld => this.createLocked(normalized, b, undefined, assertHeld));
+  }
+  private async createLocked(input: BookingInput, b: Business, context: CallContext | undefined, assertHeld: () => void) {
+    const fp = fingerprint(input);
+    let a = await this.store.attempt(input.booking_request_id);
+    if (a) {
+      this.verifyAttempt(a, b, fp, context);
+      if (a.state === 'CONFIRMED') {
+        const appointment = await this.store.appointment(a.bookingRequestId);
+        if (!appointment) throw recoveryError();
+        return this.confirmation(appointment, b);
       }
-      const s = await requireService(this.store, b.id, input.service_id);
-      if (!a) {
-        const slot = validateSlot(b, s, new Date(normalized.appointment_start), this.now());
-        const padded = reserved(b, slot);
-        assertHeld();
-        a = await this.store.prepare({ bookingRequestId: input.booking_request_id, businessId: b.id, serviceId: s.id,
-          calendarId: b.calendarId!, eventId: eventId(b.id, input.booking_request_id), fingerprint: fp, snapshot: normalized,
-          startTime: slot.start, endTime: slot.end, reservedStart: padded.start, reservedEnd: padded.end, retellCallId: context?.callId ?? null }, context);
-      }
-      const appointment = await this.execute(b, s, a, assertHeld);
-      return this.confirmation(appointment, b);
-    });
+      if (a.state === 'FAILED') throw new AppError(a.failureCode ?? 'BOOKING_FAILED', 'That booking attempt failed. Please select a time and start a new attempt.', a.failureCode === 'SLOT_UNAVAILABLE' ? 409 : 503);
+    }
+    const s = await requireService(this.store, b.id, input.service_id);
+    if (!a) {
+      const slot = validateSlot(b, s, new Date(input.appointment_start), this.now());
+      const padded = reserved(b, slot);
+      assertHeld();
+      a = await this.store.prepare({ bookingRequestId: input.booking_request_id, businessId: b.id, serviceId: s.id,
+        calendarId: b.calendarId!, eventId: eventId(b.id, input.booking_request_id), fingerprint: fp, snapshot: input,
+        startTime: slot.start, endTime: slot.end, reservedStart: padded.start, reservedEnd: padded.end, retellCallId: context?.callId ?? null }, context);
+    }
+    const appointment = await this.execute(b, s, a, assertHeld);
+    return this.confirmation(appointment, b);
   }
   private async execute(b: Business, s: Service, a: Attempt, assertHeld: () => void): Promise<Appointment> {
     // INSERTING survives a process crash or lost insert response. Resolve its event first.
