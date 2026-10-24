@@ -40,12 +40,14 @@ POST `/api/retell/create-appointment`:
 }
 ```
 
-Phone numbers normalize to E.164; Canadian local numbers may be supplied. The backend computes the end time from the service. `sms_consent` is accepted for contract compatibility but performs no SMS action.
+This flat example is for manual API-key-authorized testing, where the tester supplies a stable `booking_request_id`. Live Retell requests must use a signed `{name, call, args}` envelope with **Payload: args only OFF**. For those requests, omit `booking_request_id`: the server derives it from the verified call ID, business, and a server-managed counter persisted in `BookingAttempt`. A legacy supplied ID is validated and discarded, so a model cannot change the idempotency key. See [Retell configuration](retell-setup.md#server-owned-appointment-identifiers) for counter and retry rules. Signed args-only bookings are rejected.
+
+Phone numbers normalize to E.164; Canadian local numbers may be supplied. The backend computes the end time from the service. `sms_consent` is accepted for contract compatibility but performs no SMS action. Backend Zod enforces string limits and valid offset-bearing ISO timestamps even when Retell uses the simplified parameter schema.
 
 Confirmed response:
 
 ```json
-{"success":true,"appointment_id":"generated-id","status":"confirmed","appointment_start":"RFC3339_TIME","message":"Appointment successfully created.","is_sample_data":true}
+{"success":true,"appointment_id":"generated-id","booking_request_id":"server-owned-id-for-signed-calls","status":"confirmed","appointment_start":"RFC3339_TIME","message":"Appointment successfully created.","is_sample_data":true}
 ```
 
 POST `/api/retell/create-lead`:

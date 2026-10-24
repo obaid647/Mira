@@ -61,6 +61,8 @@ See [API examples](docs/api.md) and the five JSON parameter schemas in `docs/ret
 
 A PostgreSQL session advisory lock serializes bookings per calendar. A durable booking attempt reserves the interval before the external insert. Stable request IDs, payload fingerprints, unique constraints, and deterministic Google event IDs make retries recoverable.
 
+Signed Retell bookings use a server-owned identifier derived from the verified call ID, business, and a counter persisted in the existing booking journal. Retell does not generate the ID or counter; legacy ID arguments are validated and ignored. Identical retries reuse the journal, and changed details can advance the counter only after definitive failures. This MVP allows one successful booking per call. See [Retell setup](docs/retell-setup.md#server-owned-appointment-identifiers).
+
 ```powershell
 npm run bookings:reconcile
 ```

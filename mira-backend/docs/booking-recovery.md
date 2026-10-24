@@ -13,7 +13,9 @@ Run `npm run bookings:reconcile` after connectivity returns. It logs identifiers
 
 If insertion was uncertain, an event lookup returning 404 does not release the reservation. Conflicting availability, past appointment times, changed configuration, changed calendar ID, or mismatched/canceled events remain unresolved for manual review. Review both Calendar and the booking attempt before deciding how to resolve them; cancellation/rescheduling is outside this MVP.
 
-Do not change `booking_request_id` to retry an uncertain operation. Identical keys with changed normalized input or trusted call context return `IDEMPOTENCY_CONFLICT`. Event ID collisions are retrieved and checked, never silently accepted.
+For signed Retell calls, the server allocates `retell:<SHA256(business_id + NUL + trusted_call_id)>:booking:<counter>` under the calendar lock. The identifier and counter are durably represented in the existing booking attempt before Calendar insertion. The request's legacy ID, if present, is validated and discarded. Retries reuse matching persisted normalized input. Only changed input after definitive failures advances the counter; changed input while an attempt is prepared, uncertain, or confirmed returns `IDEMPOTENCY_CONFLICT`. One successful appointment per call is supported. Older persisted call attempts are matched and recovered using their existing identifiers.
+
+For manual flat API tests, do not change `booking_request_id` to retry an uncertain operation. Identical keys with changed normalized input or trusted call context return `IDEMPOTENCY_CONFLICT`. Event ID collisions are retrieved and checked, never silently accepted.
 
 Session advisory locks are held on a dedicated pg connection, not a pooled Prisma transaction. Broken or uncertain lock connections are discarded. Reservations protect intervals even after a crashed API process releases its lock. The lock pool requires a direct connection or Supabase session pooling.
 
