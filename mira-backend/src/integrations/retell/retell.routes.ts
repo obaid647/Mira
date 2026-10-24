@@ -9,7 +9,7 @@ import { businessInput } from '../../modules/businesses/business.schema.js';
 import { businessInformation } from '../../modules/businesses/business.service.js';
 import { serviceInput } from '../../modules/services/service.schema.js';
 import { verifyService } from '../../modules/services/service.service.js';
-import { availabilitySchema, bookingSchema } from '../../modules/appointments/appointment.schema.js';
+import { availabilitySchema, bookingSchema, retellBookingSchema } from '../../modules/appointments/appointment.schema.js';
 import { leadSchema } from '../../modules/leads/lead.schema.js';
 import { createLead } from '../../modules/leads/lead.service.js';
 export function retellRoutes(env: Env, store: Store, availability: AvailabilityService, appointments: AppointmentService, now: () => Date) {
@@ -29,7 +29,8 @@ export function retellRoutes(env: Env, store: Store, availability: AvailabilityS
   });
   router.post('/create-appointment', async (req, res) => {
     const { args, context } = await adaptFunction(req, 'create_appointment', env, store);
-    res.json(await appointments.create(bookingSchema.parse(args), context));
+    const input = context ? retellBookingSchema.parse(args) : bookingSchema.parse(args);
+    res.json(await appointments.create(input, context));
   });
   router.post('/create-lead', async (req, res) => {
     const { args, context } = await adaptFunction(req, 'create_lead', env, store);

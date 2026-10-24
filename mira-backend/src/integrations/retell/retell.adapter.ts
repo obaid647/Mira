@@ -33,5 +33,8 @@ export async function adaptFunction(req: RawRequest, name: string, env: Env, sto
     // A shared demo API key must never become a cross-business authorization mechanism.
     throw new AppError('UNAUTHORIZED', 'This key is not authorized for that business.', 401);
   }
+  if (name === 'create_appointment' && req.get('x-retell-signature') && !context) {
+    throw invalid('Booking calls require the signed name, call, and args envelope.');
+  }
   return { args, context };
 }
