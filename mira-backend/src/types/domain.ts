@@ -17,6 +17,7 @@ export interface BookingInput {
   service_address: string; appointment_start: string; problem_description: string;
   booking_request_id: string; sms_consent: boolean;
 }
+export type CallBookingInput = Omit<BookingInput, 'booking_request_id'>;
 export interface LeadInput {
   business_id: string; service_requested: string; notes: string; lead_request_id: string;
   caller_number?: string; customer_name?: string; urgency: 'unknown' | 'routine' | 'urgent';
@@ -45,6 +46,7 @@ export interface Store {
   services(businessId: string): Promise<Service[]>;
   service(businessId: string, id: string): Promise<Service | null>;
   attempt(id: string): Promise<Attempt | null>;
+  callBookingAttempts(businessId: string, callId: string): Promise<Attempt[]>;
   appointment(id: string): Promise<Appointment | null>;
   prepare(attempt: Omit<Attempt, 'customerId' | 'state' | 'failureCode'>, context?: CallContext): Promise<Attempt>;
   markAttempt(id: string, state: Attempt['state'], failureCode?: string): Promise<void>;

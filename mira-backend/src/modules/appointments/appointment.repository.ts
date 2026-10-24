@@ -8,6 +8,9 @@ function decode(row: Row): Attempt | null { return row ? { ...row, snapshot: boo
 export class AppointmentRepository {
   constructor(private db: PrismaClient) {}
   async attempt(bookingRequestId: string) { return decode(await this.db.bookingAttempt.findUnique({ where: { bookingRequestId } })); }
+  async callBookingAttempts(businessId: string, retellCallId: string) {
+    return (await this.db.bookingAttempt.findMany({ where: { businessId, retellCallId } })).map(row => decode(row)!);
+  }
   async appointment(bookingRequestId: string) { return this.db.appointment.findUnique({ where: { bookingRequestId } }); }
   async prepare(a: Omit<Attempt, 'customerId' | 'state' | 'failureCode'>, context?: CallContext): Promise<Attempt> {
     const row = await this.db.$transaction(async tx => {

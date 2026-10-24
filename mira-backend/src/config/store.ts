@@ -12,6 +12,7 @@ export function createStore(db: PrismaClient): Store {
     ping: async () => { await db.$queryRaw`SELECT 1`; }, business: id => businesses.byId(id), businessByAgent: id => businesses.byAgent(id),
     services: id => services.list(id), service: (businessId, id) => services.byId(businessId, id),
     attempt: id => appointments.attempt(id), appointment: id => appointments.appointment(id),
+    callBookingAttempts: (businessId, callId) => appointments.callBookingAttempts(businessId, callId),
     prepare: (a, c) => appointments.prepare(a, c), markAttempt: (id, state, code) => appointments.mark(id, state, code),
     confirm: a => appointments.confirm(a), reservations: (id, range, exclude) => appointments.reservations(id, range, exclude),
     unresolved: () => appointments.unresolved(), createLead: (input, fp, context) => leads.create(input, fp, context), recordWebhook: u => calls.record(u),

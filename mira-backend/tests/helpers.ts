@@ -21,6 +21,7 @@ export class MemoryStore implements Store {
   async services(businessId: string) { return this.serviceRecords.filter(s => s.businessId === businessId); }
   async service(businessId: string, id: string) { return this.serviceRecords.find(s => s.businessId === businessId && s.id === id) ?? null; }
   async attempt(id: string) { const a = this.attempts.get(id); return a ? { ...a } : null; }
+  async callBookingAttempts(businessId: string, callId: string) { return [...this.attempts.values()].filter(a => a.businessId === businessId && a.retellCallId === callId).map(a => ({ ...a })); }
   async appointment(id: string) { return this.appointments.get(id) ?? null; }
   async prepare(a: Omit<Attempt, 'customerId' | 'state' | 'failureCode'>, _context?: CallContext) {
     const key = a.businessId + ':' + a.snapshot.customer_phone;
