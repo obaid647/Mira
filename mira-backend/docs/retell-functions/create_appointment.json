@@ -1,57 +1,35 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
     "business_id": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 128,
-      "const": "demo-business"
+      "description": "Use demo-business for the configured sample business."
     },
     "service_id": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 128,
       "description": "The verified service id collected during the conversation."
     },
     "customer_name": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 120,
       "description": "The verified customer name collected during the conversation."
     },
     "customer_phone": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 40,
       "description": "The verified customer phone collected during the conversation."
     },
     "service_address": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 500,
       "description": "The verified service address collected during the conversation."
     },
     "appointment_start": {
       "type": "string",
-      "format": "date-time",
-      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
-      "description": "The verified appointment start collected during the conversation."
+      "description": "Copy the selected available slot start exactly, including its timezone offset."
     },
     "problem_description": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 2000,
       "description": "The verified problem description collected during the conversation."
     },
-    "booking_request_id": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 200,
-      "const": "{{booking_request_id}}"
-    },
     "sms_consent": {
-      "default": false,
       "type": "boolean",
       "description": "The verified sms consent collected during the conversation."
     }
@@ -63,8 +41,6 @@
     "customer_phone",
     "service_address",
     "appointment_start",
-    "problem_description",
-    "booking_request_id"
-  ],
-  "additionalProperties": false
+    "problem_description"
+  ]
 }
