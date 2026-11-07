@@ -24,6 +24,13 @@ export async function adaptFunction(req: RawRequest, name: string, env: Env, sto
   let context: CallContext | undefined;
   if (wrapped) {
     const envelope = envelopeSchema.parse(body);
+
+    console.log("Retell function debugging:", {
+      receivedName: envelope.name,
+      expectedName: name,
+      matches: envelope.name === name
+    });
+
     if (envelope.name !== name) throw invalid('The requested function does not match the endpoint.');
     const business = await store.businessByAgent(envelope.call.agent_id);
     if (!business || business.id !== env.DEMO_BUSINESS_ID || envelope.args.business_id !== business.id) throw new AppError('UNAUTHORIZED', 'This call is not authorized for that business.', 401);
