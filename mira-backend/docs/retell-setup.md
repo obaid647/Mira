@@ -26,6 +26,12 @@ Paste the corresponding JSON schema from `docs/retell-functions/`. Schemas can b
 
 Responses are JSON objects. Success and failure examples are in [api.md](api.md). Expected refusals such as unknown service are HTTP 200 with `service_found=false`; validation/authentication failures use 400/401, unavailable slots or conflicting identifiers use 409, and provider/recovery failures use 503. Retell receives failed HTTP actions as errors: configure a failure transition rather than relying solely on stored response variables.
 
+### Service clarification
+
+Map `service_candidates` to `candidates` from `get_services` and clear it along with the other service variables before every attempt. On `ambiguous`, candidates are configured `{id,name,description,active}` records, sorted by ID and deduplicated. Use their names and descriptions to ask the caller which service they mean, then call `get_services` again with the clarified request. Candidates may include inactive services; do not treat them as offers or select the first active candidate. On `unknown`, ask for more detail instead. Only `service_found=true` and `match_status=supported` authorize continuing with the returned `service.id`.
+
+All other statuses return `candidates=[]`; a single inactive match remains `unsupported`. The backend matches reordered words and English word forms against the current Supabase catalog, but does not infer unseen synonyms or relationships. An underspecified request can therefore remain `unknown` until clarified. Negated mentions conservatively require clarification unless they are part of a literal configured symptom. Mira supplies clarification wording; no backend-generated question is returned.
+
 ### Server-owned appointment identifiers
 
 Keep **Payload: args only OFF** for booking. The backend verifies the exact raw-body signature and resolves the business from `call.agent_id` before accepting `call.call_id` as trusted context. A signed args-only booking is rejected because it contains no trusted call identity. Do not add `call_id`, `retell_call_id`, or `booking_attempt_counter` to the model's arguments.

@@ -16,6 +16,12 @@ POST `/api/retell/get-services`:
 
 Successful verification returns `service_found=true`, `match_status=supported`, and `service` containing `id`, `name`, `duration_minutes`, nullable `price`, and `emergency_eligible`. Other results return `service_found=false`, `service=null`, and `match_status=unknown|ambiguous|unsupported`.
 
+Every verification response also includes `candidates`. For `ambiguous`, this is an ID-sorted, deduplicated array of configured `{id,name,description,active}` records. For all other statuses it is `[]`. Inactive services remain candidates when multiple services match; activity does not break a tie. A single inactive match returns `unsupported`.
+
+Matching reads the business's current Supabase catalog on each request. Whole-query exact names, aliases, and descriptions take precedence. Otherwise, local English stemming and unordered word matching require all meaningful words from one catalog entry, with at least two meaningful words. For example, `leaking kitchen pipe` and `the kitchen pipes are leaking` match the configured `leaking pipe` alias. Unseen synonyms and relationships are not inferred: `my sink is leaking` returns `unknown` with the sample catalog. Generic requests such as `repair` also return `unknown`.
+
+For `ambiguous`, ask the caller to distinguish the returned candidates and resubmit the clarified request. For `unknown`, request more detail. Never book a candidate until verification returns `supported`. Negated requests conservatively return `unknown` when their scope is unclear; literal configured symptoms such as `no hot water` remain matchable. Clarification wording belongs to Mira; the backend does not generate a question.
+
 POST `/api/retell/check-availability`:
 
 ```json
