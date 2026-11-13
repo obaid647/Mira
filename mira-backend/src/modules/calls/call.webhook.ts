@@ -4,14 +4,14 @@ import type { Store, WebhookUpdate } from '../../types/domain.js';
 import { optionalCaller } from '../../utils/phone.js';
 import { AppError } from '../../utils/errors.js';
 const timestamp = z.number().int().nonnegative().max(8640000000000000).optional();
-const payloadSchema = z.object({ event: z.string().max(100), call: z.object({
+export const webhookPayloadSchema = z.object({ event: z.string().max(100), call: z.object({
   call_id: z.string().min(1).max(200), agent_id: z.string().min(1).max(200),
   from_number: z.string().max(50).optional(), call_status: z.string().max(100).optional(),
   start_timestamp: timestamp, end_timestamp: timestamp, disconnection_reason: z.string().max(200).optional(),
   call_analysis: z.object({ call_summary: z.string().max(20000).optional() }).optional(),
 }).passthrough() });
 export async function handleWebhook(store: Store, body: unknown, env: Env) {
-  const p = payloadSchema.parse(body);
+  const p = webhookPayloadSchema.parse(body);
   if (!['call_started', 'call_ended', 'call_analyzed'].includes(p.event)) return;
   const b = await store.businessByAgent(p.call.agent_id);
   if (!b || b.id !== env.DEMO_BUSINESS_ID) throw new AppError('UNAUTHORIZED', 'This call is not authorized for that business.', 401);

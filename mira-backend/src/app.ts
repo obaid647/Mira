@@ -13,6 +13,7 @@ import { verifySignature, type RawRequest } from './integrations/retell/retell.a
 import { handleWebhook } from './modules/calls/call.webhook.js';
 import { errorHandler } from './middleware/errors.js';
 import { AppError } from './utils/errors.js';
+import { docsRoutes } from './docs/docs.routes.js';
 export interface AppDependencies { env: Env; store: Store; calendar: Calendar; lock: BookingLock; logger: Logger; now?: () => Date }
 export function createApp({ env, store, calendar, lock, logger, now = () => new Date() }: AppDependencies) {
   const app = express();
@@ -39,6 +40,7 @@ export function createApp({ env, store, calendar, lock, logger, now = () => new 
     await handleWebhook(store, req.body, env);
     res.status(204).end();
   });
+  app.use(docsRoutes(env.DEMO_BUSINESS_ID, now()));
   app.use((_req, _res, next) => next(new AppError('NOT_FOUND', 'Endpoint not found.', 404)));
   app.use(errorHandler(logger));
   return app;
