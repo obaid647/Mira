@@ -1,5 +1,20 @@
 # API examples
 
+## Interactive testing
+
+Start the backend and open [Swagger UI](http://localhost:3000/docs). It is available at `/docs` in all environments, with a downloadable OpenAPI 3.1 document at `/openapi.json`. Requests target the backend hosting the documentation.
+
+1. Click **Authorize**, enter the configured `API_KEY` in the `ApiKey` field without a prefix, and authorize. You must re-enter it after reloading the page.
+2. Expand `get-business-information`, click **Try it out**, check `business_id`, and click **Execute** to see the response and HTTP status.
+3. Verify your requested service with `get-services`. Use its supported service ID and a future date within the booking window for `check-availability`.
+4. Copy an exact `available_slots[].start` into `create-appointment`; its example time is only illustrative. Set a unique `booking_request_id` for each new booking and retain the same ID and payload for retries. Follow the same rule for `lead_request_id` when creating leads.
+
+**Executing appointment and lead requests writes real data.** Bookings can create Google Calendar events. The docs do not bypass database/provider configuration or Google consent. Contact information and service IDs in examples are sample data; use values appropriate to your configuration. The business example uses the configured `DEMO_BUSINESS_ID`.
+
+`/health` and `/ready` require no authentication. The Retell webhook requires a fresh signature for the exact JSON bytes sent; Swagger does not generate signatures, and the API key cannot authorize webhooks. Use the flat function requests for normal manual testing. Live Retell uses signed envelopes as described below.
+
+## Request examples
+
 Send `Content-Type: application/json` and `x-api-key: <API_KEY>` to all `/api/retell` routes. The key is restricted to the configured demo business. IDs and contact information below are sample data; dates must be replaced with valid future dates from live availability.
 
 ```json

@@ -47,6 +47,10 @@ npm run providers:check
 
 ## API
 
+Open [Swagger UI](http://localhost:3000/docs) after starting the backend. Click **Authorize**, enter your `API_KEY` without a prefix, then select an endpoint and use **Try it out → Execute**. Start with `get-business-information` or `get-services`. The [OpenAPI JSON](http://localhost:3000/openapi.json) can also be imported into other API clients. Replace the host/port when testing another environment; documentation is available in production too.
+
+For booking, choose a future date within the configured booking window, check availability, and copy an exact returned slot start into `create-appointment`. Adjust the sample business/service IDs to your configuration. Use a new request ID for each new booking or lead and keep the same ID and payload for retries. **Appointment and lead requests perform real writes**, including Google Calendar events for bookings. Existing database/provider configuration is still required. Authorization stays in memory for the current page; re-enter it after a reload.
+
 All function endpoints use `POST /api/retell/<function-name-with-hyphens>` and require `x-api-key`. Direct tests send flat JSON; live Retell sends a signed `{name, call, args}` envelope. The demo key is authorized only for `DEMO_BUSINESS_ID`. Webhooks use Retell signatures instead of the demo API key.
 
 - `get-business-information`
